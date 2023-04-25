@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Arbetspass till kalender</title>
+</head>
+<body>
+    <h1>Arbetspass till kalender</h1>
+    <form action="/generate_ics" method="POST" enctype="multipart/form-data">
+        <div>
+            <label for="pdf_file">Ladda upp PDF-fil:</label>
+            <input type="file" id="pdf_file" name="pdf_file" accept="application/pdf" required>
+        </div>
+        <div>
+            <label for="name">Signatur:</label>
+            <input type="text" id="name" name="name" placeholder="Ange din signatur" required>
+        </div>
+        <div>
+            <button type="submit">Skapa kalender</button>
+        </div>
+    </form>
+</body>
+</html>
