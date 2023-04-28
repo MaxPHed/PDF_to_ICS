@@ -133,22 +133,16 @@ def convert_to_iso_dates(work_shifts, working_hours_dict):
                 if work_hours_key == "FM":
                     start_time_str, end_time_str = time_range.split(' ')
 
-
-                    end_time_str = start_time_str
-                    add_one_day_to_end = True
-
-
                     start_time_obj = datetime.strptime(start_time_str, "%H:%M")
                     end_time_obj = datetime.strptime(end_time_str, "%H:%M")
 
                     start_datetime = date_obj.replace(hour=start_time_obj.hour, minute=start_time_obj.minute)
                     end_datetime = date_obj.replace(hour=end_time_obj.hour, minute=end_time_obj.minute)
 
-                    if add_one_day_to_end:
-                        end_datetime += timedelta(days=1)
+                    end_datetime += timedelta(days=1)
 
                     work_description = 'FM-dygn'
-                if work_hours_key == "L" or work_hours_key == "0" or work_hours_key == "F":
+                elif work_hours_key == "L" or work_hours_key == "0" or work_hours_key == "F":
                     start_time_obj = datetime.strptime('00:00', "%H:%M")
                     end_time_obj = datetime.strptime('23:59', "%H:%M")
 
@@ -192,10 +186,17 @@ def create_ics_file(start_end_dic):
     # Add events to the calendar for each work shift
     for work_shift in start_end_dic:
         event = Event()
+        #TODO Lägg till en rad som säger vilken omplan skiftet gäller i beskrivningen.
         event.name = work_shift['work_description']  # Set the event name, e.g., "Arbetspass"
 
         start_datetime = datetime.fromisoformat(work_shift['start_datetime']).replace(tzinfo=local_tz)
         end_datetime = datetime.fromisoformat(work_shift['end_datetime']).replace(tzinfo=local_tz)
+
+
+        # Generate a unique identifier for the event
+        uid_data = f"{start_datetime.isoformat()}_{end_datetime.isoformat()}_{work_shift['work_description']}"
+        uid = uid_data.replace(":", "").replace("-", "").replace("+", "").replace(" ", "")
+        event.uid = uid
 
         event.begin = start_datetime
         event.end = end_datetime
@@ -225,7 +226,10 @@ def run_all(sign, _temp_pdf_file_path):
         working_hours_list = extract_working_hours_list(tables)
         working_hours_dict = create_working_hours_dict(working_hours_list)
         for key in working_hours_dict:
-            working_hours_dict[key] = remove_last_and_empty(working_hours_dict[key])
+            if key == 'FM':
+                continue
+            else:
+                working_hours_dict[key] = remove_last_and_empty(working_hours_dict[key])
         start_end_dic = convert_to_iso_dates(work_shifts, working_hours_dict)
         #ics_file_path = create_ics_file(start_end_dic, f"arbetspass_{sign}_{str(x)}.ics")
 
