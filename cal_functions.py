@@ -4,6 +4,7 @@ from dateutil import tz
 from datetime import datetime, timedelta
 from io import BytesIO
 import tempfile
+import re
 
 
 
@@ -30,15 +31,23 @@ def get_tables_from_pdf(x, pdf_file_path):
     return tables
 
 
+def is_date_format(cell):
+    if cell is None:
+        return False
+    date_pattern = re.compile(r'\d{1,2}-[a-zA-Z]{3}')
+    return bool(date_pattern.match(cell))
+
 def extract_date_and_name_lists(tables, name):
     date_list = None
     name_list = None
 
-    # Tar ut en lista med datum och en lista med ett namn(AVI) och sparar som egna listor.
+    # Tar ut en lista med datum och en lista med ett namn(name) och sparar som egna listor.
     for table in tables:
         for row in table:
             if row and len(row) > 0:
-                if row[0] == 'Dat':
+                # Check if row contains mostly date-like strings
+                date_like_cells = [cell for cell in row if is_date_format(cell)]
+                if len(date_like_cells) / len(row) > 0.5:
                     date_list = [date.replace("maj", "may").replace("okt", "oct") for date in row]
                 elif row[0] == name:
                     name_list = row
@@ -78,9 +87,9 @@ def extract_working_hours_list(tables):
 
 
 def create_working_hours_dict(working_hours_list):
-    special_keys = ["FM", "Ö", 'L', 'F']
+    special_keys = ["FM", "Ö", 'L', 'F', 'S']
 
-    working_hours_dict = {'L': ['00:00', '23:59'], '0':['00:00', '23:59']}
+    working_hours_dict = {'L': ['00:00', '23:59'], '0':['00:00', '23:59'], 'S':['00:00', '23:59']}
     key = None
     item_count = 0
 
@@ -96,12 +105,12 @@ def create_working_hours_dict(working_hours_list):
 
     working_hours_dict = {key: working_hours_dict[key] for key in
                           sorted(working_hours_dict, key=lambda x: (str(x).isdigit(), x))}
-
-    # GÖr om till FM-dygn TODO: DEn verkar inte lägga in en time_range för 'FM'. Problemet kan vara att första listan av FM är fäljt av tre
-    #tomma rader. Hur påverkar det sen?
     if "FM" in working_hours_dict:
         start_time = working_hours_dict["FM"][0].split(' ')[0]
         working_hours_dict["FM"] = [f"{start_time} {start_time}"]
+    if "S" in working_hours_dict:
+        start_time = working_hours_dict["FM"][0].split(' ')[0]
+        working_hours_dict["S"] = ['00:00', '23:59']
     return working_hours_dict
 
 
@@ -142,7 +151,7 @@ def convert_to_iso_dates(work_shifts, working_hours_dict):
                     end_datetime += timedelta(days=1)
 
                     work_description = 'FM-dygn'
-                elif work_hours_key == "L" or work_hours_key == "0" or work_hours_key == "F":
+                elif work_hours_key == "L" or work_hours_key == "0" or work_hours_key == "F" or work_hours_key == "S":
                     start_time_obj = datetime.strptime('00:00', "%H:%M")
                     end_time_obj = datetime.strptime('23:59', "%H:%M")
 
@@ -151,6 +160,8 @@ def convert_to_iso_dates(work_shifts, working_hours_dict):
                     work_description = 'Ledig'
                     if work_hours_key =="F":
                         work_description = 'Föräldraledig'
+                    if work_hours_key =="S":
+                        work_description = 'Semester'
                 else:
                     start_time_str, end_time_str = time_range.split(' ')
 
@@ -192,6 +203,9 @@ def create_ics_file(start_end_dic):
         start_datetime = datetime.fromisoformat(work_shift['start_datetime']).replace(tzinfo=local_tz)
         end_datetime = datetime.fromisoformat(work_shift['end_datetime']).replace(tzinfo=local_tz)
 
+        # Add DTSTAMP
+        now = datetime.utcnow()
+        event.created = now
 
         # Generate a unique identifier for the event
         uid_data = f"{start_datetime.isoformat()}_{end_datetime.isoformat()}_{work_shift['work_description']}"
