@@ -228,7 +228,7 @@ def create_ics_file(start_end_dic):
     return ics_data
 
 
-def run_all(sign, _temp_pdf_file_path):
+def run_pdf(sign, _temp_pdf_file_path):
     temp_pdf_file_path = _temp_pdf_file_path
     number_of_pages = get_amount_of_pages(temp_pdf_file_path)
     x = 0
@@ -238,13 +238,16 @@ def run_all(sign, _temp_pdf_file_path):
         date_list, name_list = extract_date_and_name_lists(tables, sign)
         work_shifts = create_work_shifts(date_list, name_list)
         working_hours_list = extract_working_hours_list(tables)
+        print(f'working_hours_list:{working_hours_list}')
         working_hours_dict = create_working_hours_dict(working_hours_list)
         for key in working_hours_dict:
             if key == 'FM':
                 continue
             else:
                 working_hours_dict[key] = remove_last_and_empty(working_hours_dict[key])
+        print(f'working_hours_dict:{working_hours_dict}')
         start_end_dic = convert_to_iso_dates(work_shifts, working_hours_dict)
+        print(f'start_end_div:{start_end_dic}')
         #ics_file_path = create_ics_file(start_end_dic, f"arbetspass_{sign}_{str(x)}.ics")
 
         '''with open(ics_file_path, 'r') as f:
@@ -259,5 +262,8 @@ def run_all(sign, _temp_pdf_file_path):
 
     return main_calendar
 
+def run_png(sign, _temp_pdf_file_path):
+
+    return main_calendar
 
 #run_all("LNG", "arbetspass")

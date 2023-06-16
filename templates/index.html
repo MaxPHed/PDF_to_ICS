@@ -9,8 +9,8 @@
     <h1>Arbetspass till kalender</h1>
     <form action="/generate_ics" method="POST" enctype="multipart/form-data">
         <div>
-            <label for="pdf_file">Ladda upp PDF-fil:</label>
-            <input type="file" id="pdf_file" name="pdf_file" accept="application/pdf" required>
+            <label for="upload_file">Ladda upp fil (PDF eller PNG):</label>
+            <input type="file" id="upload_file" name="upload_file" accept=".pdf, .png" required>
         </div>
         <div>
             <label for="name">Signatur:</label>
@@ -21,4 +21,23 @@
         </div>
     </form>
 </body>
+<body>
+    <h1>Arbetspass till kalender</h1>
+    <!-- Display flashed messages -->
+    {% with messages = get_flashed_messages() %}
+    {% if messages %}
+    <ul>
+        {% for message in messages %}
+        <li>{{ message }}</li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+    {% endwith %}
+    <!-- End of flashed messages section -->
+    <form action="/generate_ics" method="POST" enctype="multipart/form-data">
+        <!-- the rest of your form -->
+    </form>
+</body>
+
 </html>
+
