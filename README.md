@@ -6,7 +6,7 @@ This program converts a PDF work schedule into an ICS-file, which can be importe
 Please note: If the input is a PNG file, working days represented by a letter instead of a number will be ignored. If the quality of the picture is too low, the program may also produce inaccurate information about the working schedule
 
 ## Usage
-1. Run the program from your Python environment (e.g., PyCharm). This will start a local web server and open the application in your default web browser.
+1. Clone the repository and run the program from your Python environment (e.g., PyCharm). This will start a local web server and open the application in your default web browser.
 2. Upload a PDF or PNG file of a supported work schedule. (planering.pdf, planering72.pdf and schema_pic is supported and tested)
 3. Enter a signature.
 4. Press the "Submit" button.

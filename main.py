@@ -18,25 +18,6 @@ def index():
 
 # Lägg till ytterligare rutter här om det behövs.
 
-
-'''@app.route('/generate_ics', methods=['POST'])
-def generate_ics():
-    pdf_file = request.files.get('pdf_file')
-    sign = request.form.get('name')
-
-    if pdf_file and sign:
-        temp_pdf_file = tempfile.NamedTemporaryFile(delete=False)
-        temp_pdf_file.write(pdf_file.read())
-        temp_pdf_file.close()
-        main_calendar = run_all(sign, temp_pdf_file.name)  # Pass the temporary file's name to run_all
-        os.unlink(temp_pdf_file.name)  # Remove the temporary PDF file after processing
-        ics_data = BytesIO(main_calendar.serialize().encode('utf-8'))
-
-        return send_file(ics_data, as_attachment=True, download_name=f"arbetspass_{sign}.ics", mimetype='text/calendar')
-
-    else:
-        return "Något gick fel. Försök igen.", 400'''
-
 @app.route('/generate_ics', methods=['POST'])
 def generate_ics():
     upload_file = request.files.get('upload_file')
@@ -67,7 +48,7 @@ def generate_ics():
         finally:
             os.remove(temp_file_path)  # Make sure to delete the file in any case
 
-        main_calendar = return_calendar(work_shifts, working_hours_dict)
+        main_calendar = return_calendar(work_shifts, working_hours_dict) #Returns an ICS-file
         print(f'main calendar: {main_calendar}')
         if main_calendar:
             ics_data = BytesIO(main_calendar.serialize().encode('utf-8'))
