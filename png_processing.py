@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pytesseract
 import re
+import os
 
 def detect_lines(image):
     # Initialize two empty lists to store the horizontal and vertical lines
@@ -291,6 +292,15 @@ def erode_image(image, cell, kernel_size=5):
     return eroded_image
 
 def read_cell(image, cell, type=None, print = False):
+    if not isinstance(image, np.ndarray) or image.ndim != 2:
+        raise ValueError("Input image must be a 2D numpy array.")
+
+    if not isinstance(cell, list) or len(cell) != 4:
+        raise ValueError("Cell must be a list of 4 points.")
+
+    if not all(0 <= x < image.shape[1] and 0 <= y < image.shape[0] for x, y in cell):
+        raise ValueError("Cell points must lie within the image bounds.")
+
     cell_contents = {}
 
     # Define cell boundaries
@@ -328,10 +338,10 @@ def read_cell(image, cell, type=None, print = False):
             else:
                 break
         if text == "":
-            dilated_image = dilate_image(gray_image, cell, 3)
+            dilated_image = dilate_image(image, cell, 3)
             text = pytesseract.image_to_string(dilated_image, config=config).strip()
         if text == "":
-            eroded_image = erode_image(gray_image, cell, 3)
+            eroded_image = erode_image(image, cell, 3)
             text = pytesseract.image_to_string(eroded_image, config=config).strip()
         if text == "":
             text = pytesseract.image_to_string(cell_image, config='--psm 10')
@@ -354,11 +364,14 @@ def get_cells_on_row(all_cells, reference_cell, only_right=False):
     reference_y_top = reference_cell[0][1]
     reference_y_bottom = reference_cell[2][1]
 
+    # Calculate the y-coordinate of the middle point of the reference cell
+    reference_y_mid = (reference_y_top + reference_y_bottom) / 2
+
     # Get the x-coordinate of the right edge and left edge of the reference cell
     reference_x_right = reference_cell[2][0]
     reference_x_left = reference_cell[0][0]
 
-    # Initialize an empty list to store the date cells
+    # Initialize an empty list to store the row cells
     row_cells = []
 
     # Iterate over all cells
@@ -371,8 +384,8 @@ def get_cells_on_row(all_cells, reference_cell, only_right=False):
         cell_x_left = cell[0][0]
         cell_x_right = cell[2][0]
 
-        # Check if any part of the current cell falls within the vertical range of the reference cell
-        if not (cell_y_bottom < reference_y_top or cell_y_top > reference_y_bottom):
+        # Check if the reference cell's middle point falls within the y-coordinates of the current cell
+        if cell_y_top <= reference_y_mid <= cell_y_bottom:
             # Check if we only want cells on the right or all cells on the same row
             if only_right:
                 # Only consider the cell if it is to the right of the reference cell
@@ -380,10 +393,11 @@ def get_cells_on_row(all_cells, reference_cell, only_right=False):
                     row_cells.append(cell)
             else:
                 # Consider all cells on the same row
-                if cell_x_right < reference_x_left or cell_x_left > reference_x_right:
+                if cell_x_right >= reference_x_left or cell_x_left <= reference_x_right:
                     row_cells.append(cell)
 
     return row_cells
+
 
 def remove_empty_cells(cells):
     return [cell for cell in cells if cell['content'].strip() != ""]
@@ -395,9 +409,21 @@ def remove_cells_without_dash(cells):
 
 
 def fix_cell_dates(cells):
+    # Check if cells is a list
+    if not isinstance(cells, list):
+        raise TypeError("Expected a list for 'cells', got: %s" % type(cells))
+
     pattern = re.compile("([0-3][0-9])-(\w{3})")  # Matches 'dd-mmm'
 
     for i in range(len(cells)):
+        # Check if cell is a dictionary with a 'content' key
+        if not isinstance(cells[i], dict) or 'content' not in cells[i]:
+            raise ValueError("Expected a dictionary with a 'content' key for each cell")
+
+        # Check if 'content' is a string
+        if not isinstance(cells[i]['content'], str):
+            raise TypeError("Expected a string for 'content' in each cell, got: %s" % type(cells[i]['content']))
+
         # If the current cell content does not match the pattern
         if not pattern.fullmatch(cells[i]['content']):
             # If it's not the first cell
@@ -420,6 +446,7 @@ def fix_cell_dates(cells):
 
     return cells
 
+
 def retrieve_cells_by_content(cells, content):
     matched_cells = []
 
@@ -438,31 +465,41 @@ def retrieve_cells_by_exact_content(cells, content):
 
     return matched_cells
 
-def read_until_sign_and_date(image, cells, sign):
-    all_cell_contents = []
-    sign_found = False
-    date_found = False
+def return_sign_and_date_cell(image, cells, sign):
+    sign_cell = None
+    date_cell = None
+
+    # Create additional search patterns for the sign
+    search_patterns = [sign.lower(), sign.lower().replace('ö', 'o'), sign.lower().replace('ä', 'a'), sign.lower().replace('å', 'a')]
 
     for cell in cells:
-        # Read the cell and append its contents to the list
+        # Read the cell
         cell_content = read_cell(image, cell)
-        all_cell_contents.append(cell_content)
 
-        # Check cell content for "sign" and the date regex
-        if sign.lower() in cell_content['content'].lower():
-            sign_found = True
-        elif re.match(r"\b(0[1-9]|1[0-9]|2[0-9]|3[0-1])-(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\b", cell_content['content'].lower()):
-            date_found = True
+        # Check cell content for "sign" and store the cell if found
+        if any(pattern in cell_content['content'].lower() for pattern in search_patterns) and sign_cell is None:
+            sign_cell = cell_content
+
+        # Check cell content for the date regex and store the cell if found
+        elif re.match(r"\b(0[1-9]|1[0-9]|2[0-9]|3[0-1])-(jan|feb|mar|apr|maj|jun|jul|aug|sep|okt|nov|dec)\b", cell_content['content'].lower()) and date_cell is None:
+            date_cell = cell_content
 
         # If both "sign" and a date have been found, stop reading cells
-        if sign_found and date_found:
+        if sign_cell is not None and date_cell is not None:
             break
 
-    return all_cell_contents
+    if sign_cell is None:
+        raise ValueError(f"No cell found containing the sign: {sign}")
 
-def get_hours_keys(unique_numbers_in_row, cells_filtered):
+    if date_cell is None:
+        raise ValueError("No cell found containing a valid date. Try uploading a file with higher quality")
+
+    return sign_cell, date_cell
+
+
+def get_hours_keys(unique_numbers_in_row, cells_filtered, gray_image):
     # Assuming page_height is the height of your page, define the start of the lower 40%
-    lower_40_threshold = color_image.shape[0] * 0.6
+    lower_40_threshold = gray_image.shape[0] * 0.6
 
     # Copy your set of numbers so you can modify it while iterating
     numbers_to_find = unique_numbers_in_row.copy()
@@ -494,7 +531,17 @@ def get_hours_keys(unique_numbers_in_row, cells_filtered):
     return cell_contents_hours_key
 
 
-def get_list_of_working_hours(cell_contents_hours_key, cells_filtered):
+def get_list_of_working_hours(cell_contents_hours_key, cells_filtered, gray_image):
+    def get_list_of_working_hours(cell_contents_hours_key, cells_filtered, gray_image):
+        if not isinstance(cell_contents_hours_key, list) or not isinstance(cells_filtered, list):
+            raise ValueError("Both cell_contents_hours_key and cells_filtered must be lists.")
+
+        if not isinstance(gray_image, np.ndarray) or gray_image.ndim != 2:
+            raise ValueError("gray_image must be a 2D numpy array.")
+
+        if not cell_contents_hours_key:
+            raise ValueError("cell_contents_hours_key cannot be empty.")
+
     working_hours_list = []
     for cell in cell_contents_hours_key:
         dic = {}
@@ -524,6 +571,12 @@ def find_corresponding_cell(mid_x, sign_row_read):
     return None
 
 def combine_date_and_work_key(date_cells_filtered, sign_row_read):
+    if not isinstance(date_cells_filtered, list) or not isinstance(sign_row_read, list):
+        raise ValueError("Both date_cells_filtered and sign_row_read must be lists.")
+
+    if not date_cells_filtered:
+        raise ValueError("date_cells_filtered cannot be empty.")
+
     result_list = []
 
     for date_cell in date_cells_filtered:
@@ -532,89 +585,126 @@ def combine_date_and_work_key(date_cells_filtered, sign_row_read):
 
         if corresponding_cell is not None:
             result_list.append({'date': date_cell['content'], 'work_hours': corresponding_cell['content']})
+
     return result_list
 
+def filter_content(sign_row_read):
+    # Use list comprehension to filter out unwanted content
+    filtered_list = [d for d in sign_row_read if not any(unwanted in d['content'] for unwanted in ['-', ':', 'empty', '—'])]
 
+    return filtered_list
+
+
+def combine_hours(working_hours_list):
+    if not isinstance(working_hours_list, list):
+        raise ValueError("working_hours_list must be a list.")
+
+    new_dict = {}
+
+    for dic in working_hours_list:
+        if not isinstance(dic, dict) or 'work_key' not in dic or 'hours' not in dic:
+            raise ValueError("Each item in working_hours_list must be a dictionary with 'work_key' and 'hours' keys.")
+
+        if not isinstance(dic['hours'], list):
+            raise ValueError("The 'hours' value in each dictionary must be a list.")
+
+        hours = dic['hours']
+        combined_hours = [' '.join(hours[i:i + 2]) for i in range(0, len(hours), 2)]
+        new_dict[dic['work_key']] = combined_hours
+
+    return new_dict
 
 filepath = 'schema_pic.png'
 signature = 'DOF'
 
-# Load the image in full color
-color_image = cv2.imread(filepath, cv2.IMREAD_COLOR)
+def return_work_shifts_and_working_keys(signature, filepath):
+    # Check if the file exists
+    if not os.path.isfile(filepath):
+        raise ValueError(f"File {filepath} does not exist.")
+    # Load the image in full color
+    color_image = cv2.imread(filepath, cv2.IMREAD_COLOR)
 
-# Convert the color image to grayscale
-gray_image = cv2.cvtColor(color_image, cv2.COLOR_BGR2GRAY)
+    # Check if the image is readable
+    if color_image is None:
+        raise ValueError(f"Could not read the file {filepath} as an image.")
 
-# Threshold the image to get a binary image
-_, binary_image = cv2.threshold(gray_image, 150, 255, cv2.THRESH_BINARY_INV)
+    # Check if the signature is valid
+    if not isinstance(signature, str) or signature == "":
+        raise ValueError("Signature must be a non-empty string.")
 
-# Detect the lines in the image. One line is one pixel wide
-horizontal_lines, vertical_lines = detect_lines(binary_image)
+    # Convert the color image to grayscale
+    gray_image = cv2.cvtColor(color_image, cv2.COLOR_BGR2GRAY)
 
-# Merge the lines to reduce them
-merged_horizontal_lines = merge_lines(horizontal_lines, True)
-merged_vertical_lines = merge_lines(vertical_lines, False)
+    # Check if the image has at least two dimensions (height and width)
+    if len(gray_image.shape) < 2:
+        raise ValueError("Image must have at least two dimensions (height and width).")
 
-#Makes a grid of cells according to the lines. Each cell has four points to mark its corners.
-cells = get_cells(merged_horizontal_lines, merged_vertical_lines)
-#Filters the cells so that they need to be at least 10x10 pixels
-cells_filtered = filter_cells_by_dimensions(cells, 10, 10)
+    # Threshold the image to get a binary image
+    _, binary_image = cv2.threshold(gray_image, 150, 255, cv2.THRESH_BINARY_INV)
 
-# Reads all the cells until it finds the signature and a cell that contains a date
-sign_and_date_cells = read_until_sign_and_date(gray_image, cells_filtered, signature)
+    # Detect the lines in the image. One line is one pixel wide
+    horizontal_lines, vertical_lines = detect_lines(binary_image)
 
-#Retrieves the signature cell from that list of cells
-sign_cell=retrieve_cells_by_content(sign_and_date_cells, signature)[-1]
+    # Merge the lines to reduce them
+    merged_horizontal_lines = merge_lines(horizontal_lines, True)
+    merged_vertical_lines = merge_lines(vertical_lines, False)
 
-#Retrieves the date cell, which is the last cell in the list.
-date_cell = sign_and_date_cells[-1]
+    # Makes a grid of cells according to the lines. Each cell has four points to mark its corners.
+    cells = get_cells(merged_horizontal_lines, merged_vertical_lines)
 
-# Get the coordinates of all the date cells that are on the row of the one we found.
-date_cells = get_cells_on_row(cells_filtered, date_cell['rect'])
+    # Check if the cells are detected
+    if not cells:
+        raise ValueError("No cells detected in the image.")
 
-#Reads the image of all the date-cells and stores it in a list with dictionarys that looks like this
-# [{'rect': [(130, 217), (179, 217), (130, 244), (179, 244)], 'content': '28-mar'},...]
-date_cells_read = []
-for cell in date_cells:
-    cell_dic = read_cell(gray_image,cell)
-    date_cells_read.append(cell_dic)
+    # Filters the cells so that they need to be at least 10x10 pixels
+    cells_filtered = filter_cells_by_dimensions(cells, 10, 10)
 
-#Filters empty cells
-date_cells_filtered = remove_empty_cells(date_cells_read)
-#Removes all cells that doesnt have a dash in it = no date
-date_cells_filtered = remove_cells_without_dash(date_cells_filtered)
-#If any date wrong, this function tries to correct that. Not foolproof, ie the first date is read wrong.
-date_cells_filtered = fix_cell_dates(date_cells_filtered)
+    # Reads the first 200 cells until it finds the signature and a cell that contains a date and returns it
+    sign_cell, date_cell = return_sign_and_date_cell(gray_image, cells_filtered[:200], signature)
 
-#Gets the coordinates for all the cells on the row of the signature
-sign_row = get_cells_on_row(cells_filtered, sign_cell['rect'])
+    # Check if the signature and date cells are detected
+    if sign_cell is None or date_cell is None:
+        raise ValueError("Could not detect the signature and date cells.")
 
-#Reads the image of all the cells in the signature row
-sign_row_read = []
-for cell in sign_row:
-    cell_dic = read_cell(gray_image,cell, 'digit')
-    sign_row_read.append(cell_dic)
+    # Get the coordinates of all the date cells that are on the row of the one we found.
+    date_cells = get_cells_on_row(cells_filtered, date_cell['rect'])
 
-#Stores a set with all the unique number values of the row corresponding the signature
-unique_numbers_in_row = set()
-for cell in sign_row_read:
-    content = cell['content']
-    if content.isdigit() and len(content) <= 2 and int(content) >0:
-        unique_numbers_in_row.add(int(content))
+    # Reads the image of all the date-cells and stores it in a list with dictionaries
+    date_cells_read = [read_cell(gray_image,cell) for cell in date_cells]
 
-#Reads the the lower 40% of the image until it finds all the unique numbers we want.
-#THen returns a list of dictionarys looking like this [{'rect': [(81, 997), (129, 997), (81, 1026), (129, 1026)], 'content': '5'},...]
-cell_contents_hours_key = get_hours_keys(unique_numbers_in_row, cells_filtered)
+    # Filters empty cells
+    date_cells_filtered = remove_empty_cells(date_cells_read)
+    # Removes all cells that don't have a dash in it = no date
+    date_cells_filtered = remove_cells_without_dash(date_cells_filtered)
+    # If any date wrong, this function tries to correct that. Not foolproof, i.e. the first date is read wrong.
+    date_cells_filtered = fix_cell_dates(date_cells_filtered)
 
-#Reads the following 6 cells to the right of the unique numbers, getting a list of dictionarys that looks like
-# this: [{'work_key': '5', 'hours': ['7:30', '12:30']},...]
-working_hours_list = get_list_of_working_hours(cell_contents_hours_key, cells_filtered)
+    # Gets the coordinates for all the cells on the row of the signature
+    sign_row = get_cells_on_row(cells_filtered, sign_cell['rect'])
 
-#Combines the date with the correspongind number on the sign row by its coordinates. Stores it in a list of dictionarys
-#that looks like this: [{'date': '28-mar', 'work_hours': '9'},...]
-date_work_key_dics = combine_date_and_work_key(date_cells_filtered, sign_row_read)
+    # Reads the image of all the cells in the signature row
+    sign_row_read = [read_cell(gray_image,cell, 'digit') for cell in sign_row]
 
-print(date_work_key_dics)
+    sign_row_read = filter_content(sign_row_read)
+
+    # Stores a set with all the unique number values of the row corresponding to the signature
+    unique_numbers_in_row = {int(cell['content']) for cell in sign_row_read if
+                             cell['content'].isdigit() and len(cell['content']) <= 2 and int(cell['content']) > 0}
+
+    # Reads the lower 40% of the image until it finds all the unique numbers we want.
+    # Then returns a list of dictionaries
+    cell_contents_hours_key = get_hours_keys(unique_numbers_in_row, cells_filtered, gray_image)
+
+    # Reads the following 6 cells to the right of the unique numbers, getting a list of dictionaries
+    working_hours_list = get_list_of_working_hours(cell_contents_hours_key, cells_filtered, gray_image)
+
+    # Converts the list to a dictionary that can be read by cal-functions.
+    working_hours_dict = combine_hours(working_hours_list)
+
+    # Combines the date with the corresponding number on the sign row by its coordinates. Stores it in a list of dictionaries
+    work_shifts = combine_date_and_work_key(date_cells_filtered, sign_row_read)
+
+    return work_shifts, working_hours_dict
 
 
 
