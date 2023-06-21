@@ -7,7 +7,7 @@ Please note: If the input is a PNG file, working days represented by a letter in
 
 ## Usage
 1. Clone the repository and run the program from your Python environment (e.g., PyCharm). This will start a local web server and open the application in your default web browser.
-2. Upload a PDF or PNG file of a supported work schedule. (planering.pdf, planering72.pdf and schema_pic is supported and tested)
+2. Upload a PDF or PNG file of a supported work schedule. (planering.pdf, planering72.pdf and schema_pic.png is supported and tested)
 3. Enter a signature.
 4. Press the "Submit" button.
 5. The program will generate an ICS file and download it to your default downloads folder.
@@ -23,5 +23,12 @@ This project uses the Tesseract OCR engine. Here's how you can install it:
 - On Mac: `brew install tesseract`
 - On Windows: Download and install the executable from [here](https://github.com/UB-Mannheim/tesseract/wiki).
 
-After installing Tesseract, install the necessary Python packages by running `pip install -r requirements.txt` in your terminal.
+##Installation
+After installing Tesseract follow these steps:
+1.Navigate to the project directory in cmd using CD (EXAMPLE: cd C:\Users\username\downloads\CalendarApp)
+2. Create a virtual environment using the following command: "python -m venv venv"
+3. Activate the virtual environment using these commands =  for Windows: "venv\Scripts\activate" , for Mac: "source venv/bin/activate"
+4. Install the necessary dependencies by running the following command: pip install -r requirements.txt (This will install all the required packages and dependencies for the project). install the necessary Python packages by running `pip install -r requirements.txt` in your terminal.
+5. Set the module to be run with "set FLASK_APP=main.py" for windows or  "export FLASK_APP=main.py" for Bash
+6. Once the previous steps are completed you can type "flask run" in the console and it will provide a html link to your local port, copy this and paste into your webbrowers searchbar and hit enter.
 
